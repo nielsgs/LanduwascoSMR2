@@ -1,0 +1,19 @@
+from DRCF import *
+ip1 = "192.168.137.5"
+ip2 = "192.168.137.4"
+port1 = 10000
+port2 = 11000
+sock1 = client_socket_open(ip1,port1)
+sock2 = client_socket_open(ip2,port2)
+
+while True:
+    res, rx_data = client_socket_read(sock1)
+    values = rx_data.decode("utf-8")
+    print(values)
+    if len(values) == 2:
+        client_socket_write(sock2, values.encode("utf-8"))
+        print("stop belt")
+
+    elif len(values) > 2:
+        client_socket_write(sock2, values.encode("utf-8"))
+        print('move to coords')

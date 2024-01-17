@@ -1,0 +1,39 @@
+import socket
+from DRCF import *
+HOST = '192.168.137.5'         #"127.0.0.1"
+PORT = 22400
+port = 10000
+
+#server
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+    server_socket.bind((HOST, PORT))
+    server_socket.listen()
+    conn, addr = server_socket.accept()
+    socket = server_socket_open(port)
+    with conn:
+        print(f"Connected by {addr}")
+        data = conn.recv(1024)
+        client_message = data.decode("utf-8")
+        print("Received message from client:", client_message)
+
+        if len(client_message) > 0:
+            command = 'vision_test()'  # asking spyder client to run vision code
+            print("sending: ", command)
+            conn.sendall(command.encode('utf-8'))
+
+            while True:
+                data = conn.recv(1024)
+                values = data.decode("utf-8")
+                if len(values) > 2:
+                    server_socket_write(socket, values.encode("utf-8"))
+                    print(values)
+                    print("sending: SENDING COORDINATES")
+                    wait(1)
+                    command = 'vision_test()'  # asking spyder client to run vision code
+                    print("sending: ", command)
+                    conn.sendall(command.encode('utf-8'))
+
+                elif len(values) == 2:
+                    server_socket_write(socket, values.encode("utf-8"))
+                    print(values)
+                    print("sending: STOP BELT")

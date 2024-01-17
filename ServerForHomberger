@@ -1,0 +1,217 @@
+# Import the necessary functions from the DRCF module
+from DRCF import *
+
+# Open a server socket connection on port 11000
+port = 11000
+sock = server_socket_open(port)
+
+set_singularity_handling(DR_AVOID)
+# Global variables to update towel coordinates, conveyor ON/OFF and other parameters
+global dy
+global dx
+global dy1
+global dy2
+global dx1
+global dz2
+global conveyor_input
+global iterations
+global numTowels
+iterations, numTowels = 0, 0
+dx, dy, dz, dy1, dx1, dy2 = 0, 0, -25 , 3 * 0, 0, 0
+conveyor_input = 5
+offsetx = -125  # Offset in X tool from the center of the towel
+offsety = -115  # Offset in Y tool from the center of the towel
+left_Wall = True  # If True, the towel is placed on the most left position
+
+# Robot parameters
+v = 1000  # Velocity of the robot in mm/s
+a = 1000  # Acceleration of the robot in mm/s^2
+nr_4 = False
+
+# Initialize digital outputs for conveyor, conveyor controller, air intake, and gripper
+set_digital_output(conveyor_input)
+set_digital_output(1)   # Conveyor controller ON
+set_digital_output(5)   # Conveyor ON
+set_digital_output(10)  # Air intake ON
+set_digital_output(13)  # Gripper OPEN
+set_digital_output(14)
+set_digital_output(11)  # Load platform CLOSED
+
+# Define positions for dropping and picking towels
+drop1x = posx(-34.5, 1070.4 - dy1, 450.6, 90.0, 179.9, 180.0)  # Upper left working to the right
+drop1tx = posx(-34.5, 1070.4 - dy1, 0.6 + 35 + dz, 90.0, 179.9, 180.0)  # Middle position for the tool
+drop2x = posx(-34.5, 1070.4 - dy1, -135 + 35 + dz, 90.0, 179.9, 180.0)  # Down left working to the right
+
+pick0x = posx(132.4, 34.5, 558.6, 180.0, -179.9, -0.0)
+pick1x = posx(132.4 + 500, 34.5 - 200, 558.6, 180.0, -179.9, -0.0)
+pick2x = posx(132.4 + 500, 34.5 - 200, 558.6 - 290, 180.0, -179.9, -0.0)
+pick3x = posx(175.7-60, 211.6-30, 553.0, 26.4, -179.3, -154.0)
+
+# Move the robot to the initial pick position
+movel(pick0x, v=500, a=500)
+
+# Main loop for towel handling process
+while iterations < 16:
+    # Read data from the server socket
+    res, rx_data = server_socket_read(sock)
+    command = rx_data.decode("utf-8")
+
+    if len(command) == 2:  # If command is of length 2 (-5), conveyor OFF
+        belt = rx_data.decode("utf-8")
+        conveyor_input = int(belt)
+        set_digital_output(conveyor_input)
+
+
+    elif len(command) > 2:  # If command is longer than 2 characters (xxx,yyy), start filling process
+        coords = rx_data.decode("utf-8")
+        dx, dy = map(int, coords.split(','))
+
+        # Define pick positions based on received coordinates
+        pick1x = posx(565 + dx + offsetx, -262 + dy + offsety, 430, 33.5, 179.5, -146.3)
+        pick2x = posx(565 + dx + offsetx, -262 + dy + offsety, 268, 33.5, 179.5, -146.3)
+
+        # Move to the pick positions with specified velocities and acceleration
+        set_digital_output(14)
+        movel(pick0x,v,a)
+        movel(pick1x,v,a)
+        movel(pick2x,v,a)
+
+        # Close the gripper when the target is reached
+        set_digital_output(-14)
+        wait(0.5)
+
+        # Define drop positions for placing the towel
+        drop1x = posx(-34.5, 1070.4 - dy1, 450.6, 90.0, 179.9, 180.0)
+        drop1tx = posx(-34.5, 1070.4 - dy1, 0.6 + 55 + dz, 90.0, 179.9, 180.0)
+        drop2x = posx(-34.5, 1070.4 - dy1, -135 + 35 + dz, 90.0, 179.9, 180.0)  # helemaal links beneden
+        drop2xx = posx(-34.5, 1070.4 - dy1, -135 + 35 + dz + 40, 90.0, 179.9, 180.0)  # helemaal links beneden
+        drop2xxx = posx(-34.5, 1039.4 - dy1, -96.2 + dz + 40, 90.0, -165.3, 180.0)
+
+        # Define the place sequence from pick to drop positions
+        place1 = [pick2x, pick1x, pick3x, drop1x]
+
+        if left_Wall == True:
+            movesx(place1, v=1000, a=1000, vel_opt=DR_MVS_VEL_CONST)
+            movel(drop2x, v=700, a=700)
+
+            set_digital_output(14)  # open gripper                             #haal lucht eraf tussen stand
+            wait(0.7)
+
+            movel(drop1tx, v=1500, a=500)
+            set_digital_output(5)
+            set_digital_output(-14)
+            start = [drop1x, pick0x]
+            movesx(start, v=1200, a=1200, vel_opt=DR_MVS_VEL_CONST)
+            #set_digital_output(5)
+            set_digital_output(14) # gripper open
+
+        if numTowels == 3 or numTowels == 7 or numTowels == 11 or numTowels == 15:
+            dy1 += 45
+            drop1x = posx(-34.5, 1070.4 - dy1, 450.6, 90.0, 179.9, -180.0)  # helemaal links boven
+            drop1tx = posx(-34.5, 1070.4 - dy1, 0.6 + 55 + dz, 90.0, 179.9, -180.0)
+            drop2x = posx(-34.5, 1070.4 - dy1, -135 + 35 + dz, 90.0, 179.9, -180.0)  # helemaal links beneden
+            drop2xx = posx(-34.5, 1070.4 - dy1, -135 + 35 + dz + 40, 90.0, 179.9, 180.0)  # helemaal links beneden
+            drop2xxx = posx(-34.5, 1039.4 - dy1 + 90, -96.2 + dz + 40, 90.0, -165.3, -180.0)
+
+            sweep = [drop2xxx, drop2xx]
+            start = [drop1x, pick0x]
+
+            movesx(place1, v=400, a=400, vel_opt=DR_MVS_VEL_CONST)
+            movesx(sweep, v=[300,25], a=[300,25], vel_opt=DR_MVS_VEL_CONST)
+            movel(drop2x, v=400, a=400)
+
+            set_digital_output(14)
+            wait(1)
+            movesx(start, v=500, a=500, vel_opt=DR_MVS_VEL_CONST)
+            set_digital_output(5)
+            nr_4 = True
+
+        # Move to the place positions with specified velocities and accelerations
+        if nr_4 == False and left_Wall == False:
+
+            sweep = [drop2xxx,drop2xx]
+            start = [drop1x, pick0x]
+
+            movesx(place1, v=1000, a=1000, vel_opt=DR_MVS_VEL_CONST)
+            movesx(sweep,v=[400,25],a=[400,25],vel_opt=DR_MVS_VEL_CONST)
+            movel(drop2x, v=400,a=400)
+
+            set_digital_output(14)                              #gripper open
+            wait(0.8)
+            movesx(start, v=1000, a=500, vel_opt=DR_MVS_VEL_CONST)
+            set_digital_output(5)  # Conveyor ON
+
+        # If the most left position is reached, perform an intermediate step
+
+        # Update towel and conveyor parameters
+        dy1 += 175
+        numTowels += 1
+        iterations += 1
+        left_Wall = False
+
+        # For every fifth towel bundle, move up one level
+        if numTowels % 4 == 0:
+            dy1 = 0
+            dz += 120
+            left_Wall = True
+            nr_4 = False
+
+        if numTowels % 8 == 0:
+            x = 0
+            dy2 = 110
+            dx1 = 100
+            dz1 = 10  # 350 level stang kar
+            dz2 = 240
+            set_digital_output(-14)  # close gripper
+            set_digital_output(-5)
+            movel(pick0x, v=600, a=600)
+            movel(pick3x, v=600, a=600)
+
+
+            def wait_touch():
+                c1 = True
+                while c1:
+                    c1 = check_force_condition(axis=DR_AXIS_Z, max=100, ref=DR_TOOL)
+                    current_pos = get_current_posx()
+                    if current_pos[0][2] <= dz1:
+                        break
+
+
+            def push():
+                movel(above_towels, v=1200, a=1200)  # Move above towels.
+                amovel(push_towels, v=100, a=100)  # Move into the wipe buffer, while checking the force.
+                wait_touch()  # Checking if required force is reached.
+                stop(DR_QSTOP)  # Stop motor without breaking.
+                movel(above_towels, v=1200, a=1200)  # Move back to above pickup position.
+
+
+            while x < 4:
+                above_towels = posx(-34.5 - 80 + dx1, 1070.4 + 10 - dy2, 420, 90.0, 179.0, -90.0)
+                push_towels = posx(-34.5 - 80 + dx1, 1070.4 + 10 - dy2, dz1, 90.0, 179.9, -90.0)
+                push()
+                x += 1
+                dx1 += 100
+                if x == 2:
+                    dy2 += 420
+                    dx1 = 100
+                if x == 4:
+                    start = [drop1x,pick0x]
+                    movesx(start, v=400, a=300, vel_opt=DR_MVS_VEL_CONST)
+                    set_digital_output(14)
+                    set_digital_output(5)
+
+
+
+        if numTowels == 16:
+            set_digital_output(-5)
+            wait(2)
+            set_digital_output(-10)
+            set_digital_output(-11)
+            wait(7)
+            set_digital_output(10)
+            set_digital_output(9)
+            wait(9)
+            set_digital_output(11)
+            wait(3)
+            set_digital_output(-9)
+            wait(3)
